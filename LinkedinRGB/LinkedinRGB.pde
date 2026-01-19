@@ -1,6 +1,3 @@
-int counter = 0;
-int timer = 0;
-
 int initial_circle_offset = 25;
 int circle_offset = initial_circle_offset;
 
@@ -12,10 +9,15 @@ int radius = diameter / 2;
 float primitive_angle = PI / 15;
 float start_time;
 
+int counter = 0; // integer counter for discrete step logic
+int timer = 0;
+
 int triangle = 0;
 int lagged_triangle = 0;
 
 int circle_index = 2;   // 1, 2, or 3
+int totalSteps = 20;    // number of counter steps
+float stepDuration = 800; // ms per step
 
 void setup() {
   size(800, 800);
@@ -25,12 +27,11 @@ void setup() {
 }
 
 void draw() {
-
   /* ===========================
-     Soft fade
+     Soft fade for trails
      =========================== */
   noStroke();
-  fill(18, 30);
+  fill(18, 10); // low alpha so previous arrows linger
   rect(0, 0, width, height);
 
   /* ===========================
@@ -43,23 +44,29 @@ void draw() {
   ellipse(center_x, center_y, diameter, diameter);
 
   /* ===========================
-     Timing + interpolation
+     Timing logic
      =========================== */
-  float interp = constrain(
-    (millis() - (timer * 800 + start_time)) / 800.0,
-    0, 1
-  );
+  float elapsed = millis() - start_time;
 
+  // Determine which step we are in
+  int activeCounter = floor(elapsed / stepDuration) % totalSteps;
+  float interp = (elapsed % stepDuration) / stepDuration;
   float eased = easeInOutCubic(interp);
-  float smoothCounter = counter + eased;
 
+  // Update counter & circle_offset once per step
+  if (activeCounter > counter) {
+    counter = activeCounter;
+    timer++;
+    circle_offset += initial_circle_offset;
+  }
+
+  float smoothCounter = counter + eased;
   float length_offset = radius + circle_offset;
   float flag_height = diameter + 2 * circle_offset;
   float arcRadius = flag_height * 0.5;
 
   float flag_x =
     center_x + length_offset * sin(primitive_angle * smoothCounter);
-
   float flag_y =
     center_y - length_offset * cos(primitive_angle * smoothCounter);
 
@@ -67,14 +74,13 @@ void draw() {
   noFill();
 
   float startAngle = 0;
-  float endAngle   = 0;
+  float endAngle = 0;
 
   /* ===========================
      MODE 1 — Incremental arm
      =========================== */
   if (circle_index == 1) {
     stroke(255, 180, 0, 220);
-
     line(center_x, center_y, flag_x, flag_y);
 
     startAngle = smoothCounter * primitive_angle - HALF_PI;
@@ -90,7 +96,6 @@ void draw() {
      =========================== */
   if (circle_index == 2) {
     stroke(200, 120, 255, 220);
-
     line(center_x, center_y,
          center_x,
          center_y - length_offset);
@@ -120,7 +125,6 @@ void draw() {
 
     float long_flag_x =
       center_x + length_offset * sin(primitive_angle * triStart);
-
     float long_flag_y =
       center_y - length_offset * cos(primitive_angle * triStart);
 
@@ -132,31 +136,23 @@ void draw() {
   }
 
   /* ===========================
-     Growing arrow along arc
+     Arrow at tip of arc
      =========================== */
-  // Arrow at the *current end* of the arc
-  float arrowAngle = endAngle; // current tip of the arc
+  float arrowAngle = endAngle; // always at tip
   float ax = center_x + arcRadius * cos(arrowAngle);
   float ay = center_y + arcRadius * sin(arrowAngle);
+  strokeWeight(2);
   drawArrowHead(ax, ay, arrowAngle + HALF_PI, 12);
 
   /* ===========================
-     Original timing logic
+     Optional reset
      =========================== */
-  if (millis() > timer * 800 + start_time) {
-    counter = (counter + 1) % 20;
-    timer++;
-    circle_offset += initial_circle_offset;
-  }
-
-  if (counter == 5) {
+  if (counter == 5 && interp >= 1) {
     resetSketch();
   }
 }
 
-/* ===========================
-   Helpers
-   =========================== */
+/* ---------- Helpers ---------- */
 
 void drawArrowHead(float x, float y, float angle, float size) {
   pushMatrix();
