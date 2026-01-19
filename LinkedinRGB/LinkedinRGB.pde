@@ -1,3 +1,7 @@
+import gifAnimation.*;
+GifMaker gifExport;
+boolean recording = true;  // set true to export gif
+
 int initial_circle_offset = 25;
 int circle_offset = initial_circle_offset;
 
@@ -15,18 +19,29 @@ int timer = 0;
 int triangle = 0;
 int lagged_triangle = 0;
 
-int circle_index = 2;   // 1, 2, or 3
+int circle_index = 3;   // 1, 2, or 3
 int totalSteps = 20;    // number of counter steps
 float stepDuration = 800; // ms per step
 
+boolean resetTriggered = false; // to ensure reset happens only once
+
 void setup() {
   size(800, 800);
+  
+  gifExport = new GifMaker(this, "animation3.gif");
+  gifExport.setRepeat(0);       // 0 = loop forever
+  gifExport.setQuality(10);     // 10 = good quality
+  gifExport.setDelay(33);       // ~30 fps
+  
   smooth(8);
   start_time = millis();
   background(18);
 }
 
 void draw() {
+    if (recording) {
+    gifExport.addFrame();
+  }
   /* ===========================
      Soft fade for trails
      =========================== */
@@ -111,29 +126,40 @@ void draw() {
   /* ===========================
      MODE 3 — Triangular sequence
      =========================== */
-  if (circle_index == 3) {
-    stroke(100, 255, 160, 220);
+ if (circle_index == 3) {
+  stroke(100, 255, 160, 220);
 
-    triangle = (counter + 1) * (counter + 2) / 2;
-    lagged_triangle = counter * (counter + 1) / 2;
+  triangle = (counter + 1) * (counter + 2) / 2;
+  lagged_triangle = counter * (counter + 1) / 2;
 
-    float triStart = lagged_triangle + eased;
-    float triEnd   = triangle + eased;
+  float triStart = lagged_triangle;
+  float triEnd   = triangle;
 
-    startAngle = triStart * primitive_angle - HALF_PI;
-    endAngle   = triEnd   * primitive_angle - HALF_PI;
+  // grow arc smoothly
+  float smoothTriEnd = triStart + (triEnd - triStart) * eased;
 
-    float long_flag_x =
-      center_x + length_offset * sin(primitive_angle * triStart);
-    float long_flag_y =
-      center_y - length_offset * cos(primitive_angle * triStart);
+  startAngle = triStart * primitive_angle - HALF_PI;
+  endAngle   = smoothTriEnd * primitive_angle - HALF_PI;
 
-    line(center_x, center_y, long_flag_x, long_flag_y);
+  float long_flag_x =
+    center_x + length_offset * sin(primitive_angle * triStart);
+  float long_flag_y =
+    center_y - length_offset * cos(primitive_angle * triStart);
 
-    arc(center_x, center_y,
-        flag_height, flag_height,
-        startAngle, endAngle);
-  }
+  line(center_x, center_y, long_flag_x, long_flag_y);
+
+  arc(center_x, center_y,
+      flag_height, flag_height,
+      startAngle, endAngle);
+
+  // arrow at tip
+  float arrowAngle = endAngle;
+  float ax = center_x + arcRadius * cos(arrowAngle);
+  float ay = center_y + arcRadius * sin(arrowAngle);
+  strokeWeight(2);
+  drawArrowHead(ax, ay, arrowAngle + HALF_PI, 12);
+}
+
 
   /* ===========================
      Arrow at tip of arc
@@ -145,10 +171,20 @@ void draw() {
   drawArrowHead(ax, ay, arrowAngle + HALF_PI, 12);
 
   /* ===========================
-     Optional reset
+     Reset after 5 steps
      =========================== */
-  if (counter == 5 && interp >= 1) {
+  if (counter >= 5 && !resetTriggered) {
+      if (recording) {
+    gifExport.finish();
+    recording = false;
+  }
     resetSketch();
+    resetTriggered = true; // ensure reset happens only once
+  }
+
+  // allow reset flag to clear after full cycle
+  if (counter < 5) {
+    resetTriggered = false;
   }
 }
 
