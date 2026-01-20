@@ -1,195 +1,239 @@
-import gifAnimation.*;
-GifMaker gifExport;
-boolean recording = true;  // set true to export gif
-
+// =======================
+// Global timing / state
+// =======================
+int counter = 0;
+int maxSteps = 5;
+float stepDuration = 800; // ms per step
+float startTime;
 int initial_circle_offset = 25;
 int circle_offset = initial_circle_offset;
 
-int center_x = 400;
-int center_y = 400;
-int diameter = 400;
-int radius = diameter / 2;
-
+// =======================
+// Geometry constants
+// =======================
 float primitive_angle = PI / 15;
-float start_time;
 
-int counter = 0; // integer counter for discrete step logic
-int timer = 0;
+// =======================
+// Text layer
+// =======================
+PGraphics textLayer;
 
-int triangle = 0;
-int lagged_triangle = 0;
-
-int circle_index = 3;   // 1, 2, or 3
-int totalSteps = 20;    // number of counter steps
-float stepDuration = 800; // ms per step
-
-boolean resetTriggered = false; // to ensure reset happens only once
-
+// =======================
+// Setup
+// =======================
 void setup() {
-  size(800, 800);
-  
-  gifExport = new GifMaker(this, "animation3.gif");
-  gifExport.setRepeat(0);       // 0 = loop forever
-  gifExport.setQuality(10);     // 10 = good quality
-  gifExport.setDelay(33);       // ~30 fps
-  
+  size(800, 600); // trimmed width
   smooth(8);
-  start_time = millis();
   background(18);
+  startTime = millis();
+
+  textLayer = createGraphics(width, height);
 }
 
+// =======================
+// Draw loop
+// =======================
 void draw() {
-    if (recording) {
-    gifExport.addFrame();
-  }
-  /* ===========================
-     Soft fade for trails
-     =========================== */
+
+  // subtle fade for trails
   noStroke();
-  fill(18, 10); // low alpha so previous arrows linger
+  fill(18, 12);
   rect(0, 0, width, height);
 
-  /* ===========================
-     Base reference circle
-     =========================== */
-  float basePulse = 40 + 20 * sin(millis() * 0.002);
-  noFill();
-  stroke(255, basePulse);
-  strokeWeight(1);
-  ellipse(center_x, center_y, diameter, diameter);
-
-  /* ===========================
-     Timing logic
-     =========================== */
-  float elapsed = millis() - start_time;
-
-  // Determine which step we are in
-  int activeCounter = floor(elapsed / stepDuration) % totalSteps;
+  // timing
+  float elapsed = millis() - startTime;
+  counter = int(elapsed / stepDuration);
   float interp = (elapsed % stepDuration) / stepDuration;
-  float eased = easeInOutCubic(interp);
+  float eased = easeInOutCubic(constrain(interp, 0, 1));
 
-  // Update counter & circle_offset once per step
-  if (activeCounter > counter) {
-    counter = activeCounter;
-    timer++;
-    circle_offset += initial_circle_offset;
+  // reset
+  if (counter >= maxSteps) {
+    counter = 0;
+    startTime = millis();
+    circle_offset = initial_circle_offset;
+    return;
   }
 
-  float smoothCounter = counter + eased;
+  float scaleFactor = 0.5;
+
+  // clear text layer
+  textLayer.beginDraw();
+  textLayer.clear();
+  textLayer.endDraw();
+
+  // =======================
+  // LEFT: circle 1 (top)
+  // =======================
+  float tx1 = width * 0.2;
+  float ty1 = height * 0.28;
+  pushMatrix();
+  translate(tx1, ty1);
+  scale(scaleFactor);
+  drawCircleMode(1, counter, eased, tx1, ty1, scaleFactor);
+  popMatrix();
+
+  // LEFT: circle 2 (bottom)
+  float tx2 = width * 0.2;
+  float ty2 = height * 0.72;
+  pushMatrix();
+  translate(tx2, ty2);
+  scale(scaleFactor);
+  drawCircleMode(2, counter, eased, tx2, ty2, scaleFactor);
+  popMatrix();
+
+  // RIGHT: circle 3
+  float tx3 = width * 0.75;
+  float ty3 = height * 0.5;
+  pushMatrix();
+  translate(tx3, ty3);
+  scale(scaleFactor);
+  drawCircleMode(3, counter, eased, tx3, ty3, scaleFactor);
+  popMatrix();
+
+  // =======================
+  // Combination arrows (DRAWN ONCE)
+  // =======================
+  // Pull arrows away from circle centers using linear interpolation
+  float trim = 0.3; // how much of the segment to trim on each side
+  
+  // top → right
+  float sx1 = lerp(tx1, tx3, trim);
+  float sy1 = lerp(ty1, ty3, trim);
+  float ex1 = lerp(tx1, tx3, 1 - trim);
+  float ey1 = lerp(ty1, ty3, 1 - trim);
+  drawConnectionArrow(sx1, sy1, ex1, ey1);
+  
+  // bottom → right
+  float sx2 = lerp(tx2, tx3, trim);
+  float sy2 = lerp(ty2, ty3, trim);
+  float ex2 = lerp(tx2, tx3, 1 - trim);
+  float ey2 = lerp(ty2, ty3, 1 - trim);
+  drawConnectionArrow(sx2, sy2, ex2, ey2);
+
+  // =======================
+  // Draw labels last
+  // =======================
+  image(textLayer, 0, 0);
+}
+
+// =======================
+// Circle drawing logic
+// =======================
+void drawCircleMode(int circle_index, int step, float eased,
+                    float tx, float ty, float scaleFactor) {
+
+  int diameter = 400;
+  int radius = diameter / 2;
   float length_offset = radius + circle_offset;
   float flag_height = diameter + 2 * circle_offset;
-  float arcRadius = flag_height * 0.5;
-
-  float flag_x =
-    center_x + length_offset * sin(primitive_angle * smoothCounter);
-  float flag_y =
-    center_y - length_offset * cos(primitive_angle * smoothCounter);
-
-  strokeWeight(2.5);
-  noFill();
+  float arcRadius = flag_height / 2;
 
   float startAngle = 0;
   float endAngle = 0;
 
-  /* ===========================
-     MODE 1 — Incremental arm
-     =========================== */
+  // hinted base circle
+  float basePulse = 40 + 20 * sin(millis() * 0.002);
+  stroke(255, basePulse);
+  noFill();
+  ellipse(0, 0, diameter, diameter);
+
+  strokeWeight(2);
+
+  // =======================
+  // Modes
+  // =======================
   if (circle_index == 1) {
     stroke(255, 180, 0, 220);
-    line(center_x, center_y, flag_x, flag_y);
+    startAngle = step * primitive_angle - HALF_PI;
+    endAngle   = (step + eased) * primitive_angle - HALF_PI;
 
-    startAngle = smoothCounter * primitive_angle - HALF_PI;
-    endAngle   = (smoothCounter + 1) * primitive_angle - HALF_PI;
+    float fx = length_offset * sin(step * primitive_angle);
+    float fy = -length_offset * cos(step * primitive_angle);
 
-    arc(center_x, center_y,
-        flag_height, flag_height,
-        startAngle, endAngle);
+    line(0, 0, fx, fy);
+    arc(0, 0, flag_height, flag_height, startAngle, endAngle);
   }
 
-  /* ===========================
-     MODE 2 — Fixed vertical arm
-     =========================== */
   if (circle_index == 2) {
-    stroke(200, 120, 255, 220);
-    line(center_x, center_y,
-         center_x,
-         center_y - length_offset);
-
+    stroke(170, 80, 220, 220);
     startAngle = -HALF_PI;
-    endAngle   = (smoothCounter + 1) * primitive_angle - HALF_PI;
+    endAngle   = (step + eased) * primitive_angle - HALF_PI;
 
-    arc(center_x, center_y,
-        flag_height, flag_height,
-        startAngle, endAngle);
+    line(0, 0, 0, -length_offset);
+    arc(0, 0, flag_height, flag_height, startAngle, endAngle);
   }
 
-  /* ===========================
-     MODE 3 — Triangular sequence
-     =========================== */
- if (circle_index == 3) {
-  stroke(100, 255, 160, 220);
+  if (circle_index == 3) {
+    stroke(100, 255, 160, 220);
 
-  triangle = (counter + 1) * (counter + 2) / 2;
-  lagged_triangle = counter * (counter + 1) / 2;
+    int triEnd = (step + 1) * (step + 2) / 2;
+    int triStart = step * (step + 1) / 2;
+    float smoothTri = triStart + (triEnd - triStart) * eased;
 
-  float triStart = lagged_triangle;
-  float triEnd   = triangle;
+    startAngle = triStart * primitive_angle - HALF_PI;
+    endAngle   = smoothTri * primitive_angle - HALF_PI;
 
-  // grow arc smoothly
-  float smoothTriEnd = triStart + (triEnd - triStart) * eased;
+    float fx = length_offset * sin(triStart * primitive_angle);
+    float fy = -length_offset * cos(triStart * primitive_angle);
 
-  startAngle = triStart * primitive_angle - HALF_PI;
-  endAngle   = smoothTriEnd * primitive_angle - HALF_PI;
+    line(0, 0, fx, fy);
+    arc(0, 0, flag_height, flag_height, startAngle, endAngle);
+  }
 
-  float long_flag_x =
-    center_x + length_offset * sin(primitive_angle * triStart);
-  float long_flag_y =
-    center_y - length_offset * cos(primitive_angle * triStart);
-
-  line(center_x, center_y, long_flag_x, long_flag_y);
-
-  arc(center_x, center_y,
-      flag_height, flag_height,
-      startAngle, endAngle);
-
-  // arrow at tip
+  // =======================
+  // Arrow
+  // =======================
   float arrowAngle = endAngle;
-  float ax = center_x + arcRadius * cos(arrowAngle);
-  float ay = center_y + arcRadius * sin(arrowAngle);
-  strokeWeight(2);
-  drawArrowHead(ax, ay, arrowAngle + HALF_PI, 12);
-}
-
-
-  /* ===========================
-     Arrow at tip of arc
-     =========================== */
-  float arrowAngle = endAngle; // always at tip
-  float ax = center_x + arcRadius * cos(arrowAngle);
-  float ay = center_y + arcRadius * sin(arrowAngle);
-  strokeWeight(2);
+  float ax = arcRadius * cos(arrowAngle);
+  float ay = arcRadius * sin(arrowAngle);
   drawArrowHead(ax, ay, arrowAngle + HALF_PI, 12);
 
-  /* ===========================
-     Reset after 5 steps
-     =========================== */
-  if (counter >= 5 && !resetTriggered) {
-      if (recording) {
-    gifExport.finish();
-    recording = false;
-  }
-    resetSketch();
-    resetTriggered = true; // ensure reset happens only once
-  }
+  // =======================
+  // Label (stable, no fade)
+  // =======================
+  int labelValue = 1;
+  if (circle_index == 2) labelValue = step;
+  if (circle_index == 3) labelValue = (step + 1) * (step + 2) / 2;
 
-  // allow reset flag to clear after full cycle
-  if (counter < 5) {
-    resetTriggered = false;
-  }
+  float canvasX = tx + ax * scaleFactor;
+  float canvasY = ty + ay * scaleFactor;
+
+  textLayer.beginDraw();
+  textLayer.noStroke();
+  textLayer.fill(18, 15); 
+  textLayer.rect(0, 0, width, height); // fade numbers gradually
+  // then draw the new numbers
+  textLayer.fill(getModeColor(circle_index));
+  textLayer.textAlign(CENTER, CENTER);
+  textLayer.textSize(40);
+  textLayer.text(labelValue,
+    canvasX + 30 * cos(arrowAngle),
+    canvasY + 30 * sin(arrowAngle));
+  textLayer.endDraw();
 }
 
-/* ---------- Helpers ---------- */
+// =======================
+// Connection arrows
+// =======================
+void drawConnectionArrow(float x1, float y1, float x2, float y2) {
+  stroke(180, 120);
+  strokeWeight(1.5);
+  line(x1, y1, x2, y2);
 
+  float angle = atan2(y2 - y1, x2 - x1);
+  float size = 10;
+
+  pushMatrix();
+  translate(x2, y2);
+  rotate(angle);
+  line(0, 0, -size,  size * 0.5);
+  line(0, 0, -size, -size * 0.5);
+  popMatrix();
+}
+
+// =======================
+// Arrowhead helper
+// =======================
 void drawArrowHead(float x, float y, float angle, float size) {
   pushMatrix();
   translate(x, y);
@@ -199,16 +243,21 @@ void drawArrowHead(float x, float y, float angle, float size) {
   popMatrix();
 }
 
-void resetSketch() {
-  counter = 0;
-  timer = 0;
-  circle_offset = initial_circle_offset;
-  start_time = millis();
-  background(18);
-}
-
+// =======================
+// Easing
+// =======================
 float easeInOutCubic(float x) {
   return x < 0.5
     ? 4 * x * x * x
     : 1 - pow(-2 * x + 2, 3) / 2;
+}
+
+// =======================
+// Color helper
+// =======================
+color getModeColor(int mode) {
+  if (mode == 1) return color(255, 180, 0, 220);
+  if (mode == 2) return color(170, 80, 220, 220);
+  if (mode == 3) return color(100, 255, 160, 220);
+  return color(255);
 }
