@@ -1,3 +1,8 @@
+
+import gifAnimation.*;
+GifMaker gifExport;
+boolean recording = true;  // set true to export gif
+
 // =======================
 // Global timing / state
 // =======================
@@ -28,13 +33,20 @@ void setup() {
   startTime = millis();
 
   textLayer = createGraphics(width, height);
+  gifExport = new GifMaker(this, "animation_full.gif");
+  gifExport.setRepeat(0);       // 0 = loop forever
+  gifExport.setQuality(10);     // 10 = good quality
+  gifExport.setDelay(33);       // ~30 fps
+  
 }
 
 // =======================
 // Draw loop
 // =======================
 void draw() {
-
+    if (recording) {
+    gifExport.addFrame();
+  }
   // subtle fade for trails
   noStroke();
   fill(18, 12);
